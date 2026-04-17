@@ -1,0 +1,13 @@
+# Build artifacts
+objs/
+ais_demo
+run_tests
+
+# Generated at runtime
+sample.nmea
+map.html
+
+# Editor / OS noise
+*.swp
+*~
+.DS_Store
