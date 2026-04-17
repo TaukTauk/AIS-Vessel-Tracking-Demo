@@ -56,11 +56,26 @@ Press Ctrl+C at any time to stop and render the final table and `map.html`.
 
 ## What the Map Shows
 
-- Six simulated vessels in the Gulf of Thailand
+- 30 simulated vessels across the Gulf of Thailand and South China Sea
 - Each vessel rendered as a **ship silhouette** (pointed bow, notched stern) rotated to its course
-- Colour-coded by ship type: cargo (orange), passenger (blue), tanker (red), other (grey)
+- Colour-coded by ship type: cargo (orange), passenger (blue), tanker (red), fishing/other (grey/green)
 - Dashed trail lines showing position history
 - Click any vessel for a popup: MMSI, SOG, COG, heading, nav status, destination, ETA, and reporting rate compliance
+
+### Vessel Scenarios
+
+| Category | Vessels | Scenarios |
+|---|---|---|
+| Cargo | 8 | Thai, Indonesian, Singapore, HK, Japanese, Malaysian, Korean, Chinese — various speeds |
+| Tanker | 5 | Product, crude, chemical; one at anchor, one constrained by draught |
+| Passenger | 3 | Inter-island ferry, fast ferry, cruise ship |
+| Fishing | 3 | Two engaged in fishing, one moored |
+| Special | 4 | Tug (restricted maneuverability), pilot boat, SAR vessel, dredger |
+| HSC | 1 | High-speed craft at 32 kt |
+| Research | 1 | Survey vessel (restricted maneuverability, heading=511 sentinel) |
+| Sailing | 1 | Yacht under sail |
+| Offshore/Supply | 2 | Supply vessel, anchor-handling tug |
+| Incident | 2 | Not under command (drifting), aground |
 
 ---
 

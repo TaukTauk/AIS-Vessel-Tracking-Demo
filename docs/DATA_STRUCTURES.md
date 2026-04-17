@@ -426,7 +426,7 @@ The simplest possible vessel store: a flat array with a count.
 
 **Why a flat array?**
 
-For a demo with 6 vessels, linear search (`O(n)`) is indistinguishable from `O(1)`. Even at the maximum of 64 vessels, the search loop touches at most 64 × 4 bytes (MMSI comparison) — one cache line. The simplicity benefit of a flat array far outweighs the theoretical performance cost at this scale.
+For a demo with 30 vessels, linear search (`O(n)`) is indistinguishable from `O(1)`. Even at the maximum of 64 vessels, the search loop touches at most 64 × 4 bytes (MMSI comparison) — one cache line. The simplicity benefit of a flat array far outweighs the theoretical performance cost at this scale.
 
 **Why 64?**
 A real VTS station tracks hundreds of vessels simultaneously. For this demo 64 is more than sufficient and keeps the struct under 1 MB. The constant is defined in the header so it can be raised without changing any other code.

@@ -158,8 +158,8 @@ AisStatus output_html(const VesselTable *t, const char *path)
     FILE *f = fopen(path, "w");
     if (!f) return AIS_ERR_IO;
 
-    /* Centre map on Gulf of Thailand */
-    float centre_lat = 11.5f, centre_lon = 101.0f;
+    /* Centre map on Gulf of Thailand / South China Sea */
+    float centre_lat = 11.3f, centre_lon = 102.0f;
 
     fprintf(f,
         "<!DOCTYPE html>\n<html>\n<head>\n"
@@ -213,7 +213,7 @@ AisStatus output_html(const VesselTable *t, const char *path)
 
     fprintf(f, "  </table>\n</div>\n<script>\n");
     fprintf(f,
-        "var map = L.map('map').setView([%.4f, %.4f], 9);\n"
+        "var map = L.map('map').setView([%.4f, %.4f], 8);\n"
         "L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',"
         "{attribution:'&copy; OpenStreetMap &copy; CARTO'}).addTo(map);\n",
         centre_lat, centre_lon);

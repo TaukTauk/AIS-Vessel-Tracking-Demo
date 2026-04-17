@@ -106,7 +106,7 @@ AIS Class A equipment must transmit at intervals determined by the vessel's spee
 
 **Why this matters:** A coast guard VTS station receiving AIS must know how stale any given position fix is. A fast cargo ship at 24 knots changes position by ~12 metres every second — a 3-second interval keeps the picture current. A vessel at anchor barely moves; 3-minute intervals are sufficient.
 
-**How the demo uses this:** Six vessels are configured at different speeds. The simulation generates exactly the right number of NMEA sentences per vessel over 10 minutes. The replay then measures each vessel's observed average interval and compares it to the expected value, reporting compliance.
+**How the demo uses this:** Thirty vessels are configured across all ship categories with diverse speeds, nav statuses, and nationalities. The simulation generates exactly the right number of NMEA sentences per vessel over 10 minutes. The replay then measures each vessel's observed average interval and compares it to the expected value, reporting compliance.
 
 ### 3.5 Vessel State Tracking
 
@@ -142,7 +142,7 @@ This is a flat-Earth approximation valid for short distances (< 100 nm). For the
 │                        main.c                           │
 │                                                         │
 │  [1] generate_sample_log()  → sample.nmea               │
-│      6 vessels × correct IMO intervals × 10 minutes     │
+│      30 vessels × correct IMO intervals × 10 minutes    │
 │                                                         │
 │  [2] replay_log()           → VesselTable               │
 │      Parse T= timestamp prefix, decode NMEA, update     │

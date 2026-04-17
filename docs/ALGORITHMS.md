@@ -640,7 +640,7 @@ The haversine formula calculates the great-circle distance between two points an
 
 ### Problem
 
-The simulation must generate AIS messages for six vessels, each with a different transmission interval, interleaved chronologically over 600 seconds. This is essentially a **discrete-event simulation** where events are transmissions.
+The simulation must generate AIS messages for thirty vessels, each with a different transmission interval, interleaved chronologically over 600 seconds. This is essentially a **discrete-event simulation** where events are transmissions.
 
 ### Algorithm
 
@@ -673,7 +673,7 @@ for (int t = 0; t <= sim_duration; t++) {
 
 **Why not a priority queue?**
 
-For 6 vessels, iterating all 6 on every tick is `O(6 × 600) = 3,600` operations. A min-heap priority queue would reduce this to `O(n log n)` event scheduling but would cost significantly more code for negligible gain at this scale. For a simulation with thousands of vessels, a priority queue would be the right choice.
+For 30 vessels, iterating all 30 on every tick is `O(30 × 600) = 18,000` operations. A min-heap priority queue would reduce this to `O(n log n)` event scheduling but would cost significantly more code for negligible gain at this scale. For a simulation with thousands of vessels, a priority queue would be the right choice.
 
 **Chronological ordering:**
 
