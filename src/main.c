@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 199309L   /* nanosleep, signal */
+
 #include "ais.h"
 #include "vessel.h"
 #include "output.h"
@@ -7,10 +9,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <signal.h>
+#include <time.h>
 
 #define SAMPLE_LOG   "sample.nmea"
 #define MAP_HTML     "map.html"
 #define SIM_DURATION 600   /* seconds */
+
+/* ── Signal handler ──────────────────────────────────────────────────────── */
+
+static volatile sig_atomic_t g_interrupted = 0;
+static void handle_sigint(int sig) { (void)sig; g_interrupted = 1; }
 
 /* ── Simulation seed data ────────────────────────────────────────────────── */
 
@@ -60,7 +69,6 @@ static int generate_sample_log(const char *path)
         return 1;
     }
 
-    /* Mutable state for each vessel */
     float lat[N_VESSELS], lon[N_VESSELS], sog[N_VESSELS], cog[N_VESSELS];
     uint8_t nav[N_VESSELS];
     uint16_t hdg[N_VESSELS];
@@ -74,7 +82,7 @@ static int generate_sample_log(const char *path)
         nav[i]      = VESSELS[i].nav_status;
         hdg[i]      = VESSELS[i].heading;
         next_tx[i]  = 0;
-        next_tx5[i] = 0;  /* Type 5 first at t=0 */
+        next_tx5[i] = 0;
     }
 
     char sentence[256];
@@ -98,7 +106,7 @@ static int generate_sample_log(const char *path)
                 m5.dim_port    = VESSELS[i].dim_port;
                 m5.dim_stbd    = VESSELS[i].dim_stbd;
                 m5.draught_raw = VESSELS[i].draught_raw;
-                m5.eta_month   = 0;   /* N/A */
+                m5.eta_month   = 0;
                 m5.eta_day     = 0;
                 m5.eta_hour    = 24;
                 m5.eta_min     = 60;
@@ -145,43 +153,66 @@ static int generate_sample_log(const char *path)
 
 /* ── Log replay ──────────────────────────────────────────────────────────── */
 
-static int replay_log(const char *path, VesselTable *table, AisErrorCtx *ctx)
+/* speed_mult = 0  → instant replay (no sleep)
+   speed_mult > 0  → real-time playback at that multiplier (uses T= timestamps)
+   live_clock      → use time(NULL) for received_at when no T= present (stdin) */
+
+#define DRAW_INTERVAL_S 2
+
+static int replay_log(FILE *f, VesselTable *table, AisErrorCtx *ctx,
+                      double speed_mult, int live_clock)
 {
-    FILE *f = fopen(path, "r");
-    if (!f) {
-        fprintf(stderr, "Cannot open '%s': %s\n", path, strerror(errno));
-        return 1;
-    }
-
     char line[512];
-    int line_num = 0;
+    int  line_num   = 0;
+    long last_sim_t = 0;
 
-    while (fgets(line, sizeof(line), f)) {
+    time_t wall_start = time(NULL);
+    double sim_start  = -1.0;
+    time_t last_draw  = 0;
+
+    while (fgets(line, sizeof(line), f) && !g_interrupted) {
         line_num++;
 
-        /* Strip newline */
         int len = (int)strlen(line);
         if (len > 0 && line[len - 1] == '\n') line[len - 1] = '\0';
 
         ctx->sentences_read++;
 
-        /* Parse T=NNN prefix */
-        time_t ts = 0;
-        const char *nmea = line;
+        /* Parse optional T=NNN prefix */
+        int     ts_present = 0;
+        time_t  ts         = live_clock ? time(NULL) : 0;
+        const char *nmea   = line;
 
         if (strncmp(line, "T=", 2) == 0) {
             char *space = strchr(line, ' ');
             if (space) {
-                *space = '\0';
-                ts = (time_t)atoi(line + 2);
-                *space = ' ';
-                nmea = space + 1;
+                *space     = '\0';
+                long sim_t = atol(line + 2);
+                ts         = (time_t)sim_t;
+                *space     = ' ';
+                nmea       = space + 1;
+                ts_present = 1;
+                last_sim_t = sim_t;
+
+                /* Real-time pacing: sleep until this sentence's scheduled time */
+                if (speed_mult > 0.0) {
+                    if (sim_start < 0.0) sim_start = (double)sim_t;
+                    double target  = (sim_t - sim_start) / speed_mult;
+                    double elapsed = difftime(time(NULL), wall_start);
+                    double delay   = target - elapsed;
+                    if (delay > 0.0) {
+                        struct timespec req;
+                        req.tv_sec  = (time_t)delay;
+                        req.tv_nsec = (long)((delay - (double)req.tv_sec) * 1e9);
+                        nanosleep(&req, NULL);
+                    }
+                }
             }
         }
 
-        /* Peek at field[1] (total fragments) to route to the right parser */
-        const char *comma = strchr(nmea, ',');
-        int is_multi = (comma && atoi(comma + 1) == 2);
+        /* Route to the right parser */
+        const char *comma   = strchr(nmea, ',');
+        int         is_multi = (comma && atoi(comma + 1) == 2);
 
         if (is_multi) {
             AISMsg5 msg5;
@@ -191,7 +222,7 @@ static int replay_log(const char *path, VesselTable *table, AisErrorCtx *ctx)
                 ctx->sentences_ok++;
                 vessel_update_static(table, &msg5, ctx);
             } else if (st5 == AIS_FRAG_PENDING) {
-                ctx->sentences_ok++;   /* valid fragment, not yet a full message */
+                ctx->sentences_ok++;
             } else {
                 ais_error_log(ctx, st5, line_num, "%s", nmea);
             }
@@ -206,38 +237,121 @@ static int replay_log(const char *path, VesselTable *table, AisErrorCtx *ctx)
             ctx->sentences_ok++;
             vessel_update(table, &msg, ctx);
         }
+
+        /* Periodic display refresh during live / real-time playback */
+        if (speed_mult > 0.0 || live_clock) {
+            time_t now = time(NULL);
+            if (now - last_draw >= DRAW_INTERVAL_S) {
+                printf("\033[2J\033[H");
+                if (ts_present)
+                    printf("[ sim t=%lds  |  real %.0fs elapsed ]\n",
+                           last_sim_t, difftime(now, wall_start));
+                else
+                    printf("[ real %.0fs elapsed ]\n",
+                           difftime(now, wall_start));
+                output_terminal(table);
+                last_draw = now;
+            }
+        }
     }
 
-    if (ferror(f)) {
+    if (!g_interrupted && ferror(f)) {
         ais_error_log(ctx, AIS_ERR_IO, line_num, "Read error: %s",
                       strerror(errno));
-        fclose(f);
         return 1;
     }
 
-    fclose(f);
     return 0;
+}
+
+/* ── Usage ───────────────────────────────────────────────────────────────── */
+
+static void print_usage(const char *prog)
+{
+    fprintf(stderr,
+        "Usage:\n"
+        "  %s                    Simulate and render (default)\n"
+        "  %s --live             Real-time playback at 10x speed\n"
+        "  %s --live --speed N   Real-time playback at Nx speed\n"
+        "  %s --stdin            Read raw NMEA from stdin\n"
+        "  %s --file <path>      Replay a saved NMEA log\n",
+        prog, prog, prog, prog, prog);
 }
 
 /* ── Main ────────────────────────────────────────────────────────────────── */
 
-int main(void)
-{
-    /* 1. Generate sample NMEA log */
-    if (generate_sample_log(SAMPLE_LOG) != 0)
-        return 1;
+typedef enum { MODE_SIMULATE, MODE_LIVE, MODE_STDIN, MODE_FILE } InputMode;
 
-    /* 2. Replay and build vessel table */
+int main(int argc, char **argv)
+{
+    InputMode   mode       = MODE_SIMULATE;
+    double      speed_mult = 10.0;
+    const char *file_path  = NULL;
+
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--live") == 0) {
+            mode = MODE_LIVE;
+        } else if (strcmp(argv[i], "--speed") == 0 && i + 1 < argc) {
+            speed_mult = atof(argv[++i]);
+            if (speed_mult <= 0.0) {
+                fprintf(stderr, "Error: --speed must be > 0\n");
+                return 1;
+            }
+        } else if (strcmp(argv[i], "--stdin") == 0) {
+            mode = MODE_STDIN;
+        } else if (strcmp(argv[i], "--file") == 0 && i + 1 < argc) {
+            mode      = MODE_FILE;
+            file_path = argv[++i];
+        } else {
+            fprintf(stderr, "Unknown option: %s\n\n", argv[i]);
+            print_usage(argv[0]);
+            return 1;
+        }
+    }
+
     VesselTable table;
     vessel_table_init(&table);
-
     AisErrorCtx ctx;
     ais_error_init(&ctx);
 
-    if (replay_log(SAMPLE_LOG, &table, &ctx) != 0)
-        return 1;
+    int rc = 0;
 
-    /* 3. Output */
+    if (mode == MODE_SIMULATE) {
+        if (generate_sample_log(SAMPLE_LOG) != 0) return 1;
+        FILE *f = fopen(SAMPLE_LOG, "r");
+        if (!f) { fprintf(stderr, "Cannot open '%s': %s\n",
+                          SAMPLE_LOG, strerror(errno)); return 1; }
+        rc = replay_log(f, &table, &ctx, 0.0, 0);
+        fclose(f);
+
+    } else if (mode == MODE_LIVE) {
+        if (generate_sample_log(SAMPLE_LOG) != 0) return 1;
+        printf("Live playback at %.0fx speed — Ctrl+C to stop and render\n\n",
+               speed_mult);
+        signal(SIGINT, handle_sigint);
+        FILE *f = fopen(SAMPLE_LOG, "r");
+        if (!f) { fprintf(stderr, "Cannot open '%s': %s\n",
+                          SAMPLE_LOG, strerror(errno)); return 1; }
+        rc = replay_log(f, &table, &ctx, speed_mult, 0);
+        fclose(f);
+
+    } else if (mode == MODE_STDIN) {
+        printf("Reading from stdin — Ctrl+C to stop and render\n\n");
+        signal(SIGINT, handle_sigint);
+        rc = replay_log(stdin, &table, &ctx, 0.0, 1);
+
+    } else {   /* MODE_FILE */
+        FILE *f = fopen(file_path, "r");
+        if (!f) { fprintf(stderr, "Cannot open '%s': %s\n",
+                          file_path, strerror(errno)); return 1; }
+        rc = replay_log(f, &table, &ctx, 0.0, 0);
+        fclose(f);
+    }
+
+    if (rc != 0) return rc;
+
+    /* Final render — always runs, even after Ctrl+C */
+    printf("\033[2J\033[H");
     output_terminal(&table);
 
     AisStatus st = output_html(&table, MAP_HTML);

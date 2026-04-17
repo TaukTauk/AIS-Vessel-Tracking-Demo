@@ -40,7 +40,7 @@ make clean    # remove generated files
 | Phase 1 | Encode/decode Type 1, vessel tracking, terminal + HTML output | ✅ Complete |
 | Phase 1b | Clean implementation — error handling, validity flags, circular history | ✅ Complete (155 tests pass) |
 | Phase 2 | Message Type 5 — ship name, IMO number, destination | ✅ Complete (two-fragment decode, destination + ETA in map popup) |
-| Phase 3 | Live input — stdin / RTL-SDR feed | ⬜ Planned |
+| Phase 3 | Real-time playback (`--live`), stdin input, graceful Ctrl+C | ✅ Complete (185 tests pass) |
 | Phase 4 | Animated HTML map with playhead | ⬜ Planned |
 
 ---

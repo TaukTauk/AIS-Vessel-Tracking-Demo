@@ -22,6 +22,19 @@ make test     # run the full test suite (~185 tests)
 make clean    # remove build artefacts and generated files
 ```
 
+## Live Playback
+
+```bash
+./ais_demo                    # simulate and render (default)
+./ais_demo --live             # real-time playback at 10× speed with live terminal refresh
+./ais_demo --live --speed 3   # same at 3× speed (slower, more dramatic)
+./ais_demo --file sample.nmea # instant replay of any saved NMEA log
+./ais_demo --stdin            # read raw NMEA from stdin (e.g. rtl_ais -n | ./ais_demo --stdin)
+```
+
+In `--live` mode the terminal table refreshes every 2 seconds as vessels move.
+Press Ctrl+C at any time to stop and render the final table and `map.html`.
+
 ---
 
 ## What It Demonstrates
@@ -92,5 +105,5 @@ ais_demo/
 | 1 | Encode/decode Type 1, vessel tracking, terminal + HTML output | ✅ Complete |
 | 1b | Clean implementation — error handling, validity flags, circular history | ✅ Complete |
 | 2 | Message Type 5 — ship name, IMO number, destination, two-fragment reassembly | ✅ Complete |
-| 3 | Live input — stdin / RTL-SDR feed | ⬜ Planned |
+| 3 | Real-time playback (`--live`), stdin input, graceful Ctrl+C | ✅ Complete |
 | 4 | Animated HTML map with playhead | ⬜ Planned |
